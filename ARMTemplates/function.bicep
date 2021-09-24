@@ -5,6 +5,7 @@ var storageAccountName = format('{0}storage', replace(appNamePrefix, '-', ''))
 var storageQueueName = 'events'
 var appServiceName = '${appNamePrefix}-appservice'
 var functionAppName = '${appNamePrefix}-functionapp'
+var rcloneScript = 'chmod +x rclone && ./rclone copy rclone:config config && ./rclone --config config/rclone.conf -v copy src:artifacts dst: && ./rclone copy config rclone:config'
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2019-06-01' = {
   name: storageAccountName
@@ -44,6 +45,11 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2021-04-01'
       days: 7
     }
   }
+}
+
+resource container 'Microsoft.Storage/storageAccounts/blobServices/containers@2021-04-01' = {
+  parent: blobService
+  name: 'config'
 }
 
 resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2021-04-01' = {
@@ -124,6 +130,22 @@ resource functionApp 'Microsoft.Web/sites@2021-01-15' = {
         {
           name: 'WEBSITE_RUN_FROM_PACKAGE'
           value: 'https://github.com/yaegashi/rclonefunction/releases/latest/download/rclonefunction.zip'
+        }
+        {
+          name: 'RCLONE_CONFIG_RCLONE_TYPE'
+          value: 'azureblob'
+        }
+        {
+          name: 'RCLONE_CONFIG_RCLONE_ACCOUNT'
+          value: storageAccount.name
+        }
+        {
+          name: 'RCLONE_CONFIG_RCLONE_KEY'
+          value: storageAccount.listKeys().keys[0].value
+        }
+        {
+          name: 'RCLONE_SCRIPT'
+          value: rcloneScript
         }
       ]
     }

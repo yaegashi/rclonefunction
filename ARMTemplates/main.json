@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.4.613.9944",
-      "templateHash": "3214074120539962582"
+      "templateHash": "955950208328877484"
     }
   },
   "parameters": {
@@ -196,7 +196,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.4.613.9944",
-              "templateHash": "17219219852265929220"
+              "templateHash": "179926134547530760"
             }
           },
           "parameters": {
@@ -211,7 +211,8 @@
             "storageAccountName": "[format('{0}storage', replace(parameters('appNamePrefix'), '-', ''))]",
             "storageQueueName": "events",
             "appServiceName": "[format('{0}-appservice', parameters('appNamePrefix'))]",
-            "functionAppName": "[format('{0}-functionapp', parameters('appNamePrefix'))]"
+            "functionAppName": "[format('{0}-functionapp', parameters('appNamePrefix'))]",
+            "rcloneScript": "chmod +x rclone && ./rclone copy rclone:config config && ./rclone --config config/rclone.conf -v copy src:artifacts dst: && ./rclone copy config rclone:config"
           },
           "resources": [
             {
@@ -255,6 +256,15 @@
                 }
               },
               "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+              "apiVersion": "2021-04-01",
+              "name": "[format('{0}/{1}/{2}', variables('storageAccountName'), 'default', 'config')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', variables('storageAccountName'), 'default')]",
                 "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
               ]
             },
@@ -344,6 +354,22 @@
                     {
                       "name": "WEBSITE_RUN_FROM_PACKAGE",
                       "value": "https://github.com/yaegashi/rclonefunction/releases/latest/download/rclonefunction.zip"
+                    },
+                    {
+                      "name": "RCLONE_CONFIG_RCLONE_TYPE",
+                      "value": "azureblob"
+                    },
+                    {
+                      "name": "RCLONE_CONFIG_RCLONE_ACCOUNT",
+                      "value": "[variables('storageAccountName')]"
+                    },
+                    {
+                      "name": "RCLONE_CONFIG_RCLONE_KEY",
+                      "value": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2019-06-01').keys[0].value]"
+                    },
+                    {
+                      "name": "RCLONE_SCRIPT",
+                      "value": "[variables('rcloneScript')]"
                     }
                   ]
                 },

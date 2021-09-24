@@ -11,6 +11,10 @@ import (
 	"time"
 )
 
+const (
+	RCloneScriptEnv = "RCLONE_SCRIPT"
+)
+
 func dump(v interface{}) {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
@@ -111,10 +115,6 @@ func (app *App) TimerCustomHandler(req *InvokeRequest, res *InvokeResponse) erro
 
 func (app *App) RCloneGoroutine(ctx context.Context) {
 	log.Println("RCLONE: START")
-	err := os.Chmod("rclone", 0755)
-	if err != nil {
-		log.Println("RCLONE: CHMOD FAILED:", err)
-	}
 loop1:
 	for {
 		log.Println("RCLONE: WAIT")
@@ -134,20 +134,16 @@ loop1:
 				break loop1
 			}
 		}
-		log.Println("RCLONE: RECEIVED", c)
-		log.Println("RCLONE: EXEC")
-		cmd := exec.Command(
-			"./rclone",
-			"--config",
-			"rclone.conf",
-			"sync",
-			"-v",
-			"geminiblob:artifacts",
-			"geminispo:",
-		)
+		script, ok := os.LookupEnv(RCloneScriptEnv)
+		if !ok {
+			log.Println("RCLONE: " + RCloneScriptEnv + " is not set!")
+			continue
+		}
+		log.Printf("RCLONE: EXEC\n%s", script)
+		cmd := exec.Command("sh", "-c", script)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		err = cmd.Run()
+		err := cmd.Run()
 		if err != nil {
 			log.Println("RCLONE: FAILED:", err)
 			continue
