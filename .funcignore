@@ -1,0 +1,6 @@
+.git*
+.vscode
+.devcontainer
+local.settings.json
+build.sh
+test

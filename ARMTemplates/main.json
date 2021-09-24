@@ -1,0 +1,460 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2018-05-01/subscriptionDeploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.4.613.9944",
+      "templateHash": "7536392987982007453"
+    }
+  },
+  "parameters": {
+    "storageRGName": {
+      "type": "string"
+    },
+    "storageAccountName": {
+      "type": "string"
+    },
+    "storageContainerName": {
+      "type": "string",
+      "defaultValue": "artifacts"
+    },
+    "functionRGName": {
+      "type": "string"
+    }
+  },
+  "functions": [],
+  "variables": {
+    "location": "[deployment().location]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2021-04-01",
+      "name": "[parameters('storageRGName')]",
+      "location": "[variables('location')]"
+    },
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "apiVersion": "2021-04-01",
+      "name": "[parameters('functionRGName')]",
+      "location": "[variables('location')]"
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-10-01",
+      "name": "storageModule",
+      "resourceGroup": "[parameters('storageRGName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "storageAccountName": {
+            "value": "[parameters('storageAccountName')]"
+          },
+          "storageContainerName": {
+            "value": "[parameters('storageContainerName')]"
+          },
+          "functionStorageAccountId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('functionRGName')), 'Microsoft.Resources/deployments', 'functionModule'), '2019-10-01').outputs.storageAccountId.value]"
+          },
+          "functionStorageQueueName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('functionRGName')), 'Microsoft.Resources/deployments', 'functionModule'), '2019-10-01').outputs.storageQueueName.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.4.613.9944",
+              "templateHash": "13752932892281504014"
+            }
+          },
+          "parameters": {
+            "storageAccountName": {
+              "type": "string"
+            },
+            "storageContainerName": {
+              "type": "string"
+            },
+            "functionStorageAccountId": {
+              "type": "string"
+            },
+            "functionStorageQueueName": {
+              "type": "string",
+              "defaultValue": "events"
+            }
+          },
+          "functions": [],
+          "variables": {
+            "location": "[resourceGroup().location]",
+            "eventGridName": "[format('{0}-eventgrid', parameters('storageAccountName'))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2021-04-01",
+              "name": "[parameters('storageAccountName')]",
+              "location": "[variables('location')]",
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "kind": "StorageV2"
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices",
+              "apiVersion": "2019-06-01",
+              "name": "[format('{0}/{1}', parameters('storageAccountName'), 'default')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+              "apiVersion": "2021-04-01",
+              "name": "[format('{0}/{1}/{2}', parameters('storageAccountName'), 'default', parameters('storageContainerName'))]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccountName'), 'default')]",
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.EventGrid/systemTopics",
+              "apiVersion": "2021-06-01-preview",
+              "name": "[variables('eventGridName')]",
+              "location": "[variables('location')]",
+              "properties": {
+                "source": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+                "topicType": "Microsoft.Storage.StorageAccounts"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.EventGrid/systemTopics/eventSubscriptions",
+              "apiVersion": "2021-06-01-preview",
+              "name": "[format('{0}/{1}', variables('eventGridName'), 'events')]",
+              "properties": {
+                "destination": {
+                  "properties": {
+                    "resourceId": "[parameters('functionStorageAccountId')]",
+                    "queueName": "[parameters('functionStorageQueueName')]",
+                    "queueMessageTimeToLiveInSeconds": 604800
+                  },
+                  "endpointType": "StorageQueue"
+                },
+                "filter": {
+                  "subjectBeginsWith": "[format('/blobServices/default/containers/{0}/blobs', parameters('storageContainerName'))]",
+                  "includedEventTypes": [
+                    "Microsoft.Storage.BlobCreated",
+                    "Microsoft.Storage.BlobDeleted",
+                    "Microsoft.Storage.BlobRenamed",
+                    "Microsoft.Storage.DirectoryCreated",
+                    "Microsoft.Storage.DirectoryDeleted",
+                    "Microsoft.Storage.DirectoryRenamed"
+                  ],
+                  "enableAdvancedFilteringOnArrays": true
+                },
+                "eventDeliverySchema": "EventGridSchema",
+                "retryPolicy": {
+                  "maxDeliveryAttempts": 30,
+                  "eventTimeToLiveInMinutes": 1440
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', parameters('storageAccountName'), 'default', parameters('storageContainerName'))]",
+                "[resourceId('Microsoft.EventGrid/systemTopics', variables('eventGridName'))]"
+              ]
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('functionRGName')), 'Microsoft.Resources/deployments', 'functionModule')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('storageRGName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-10-01",
+      "name": "functionModule",
+      "resourceGroup": "[parameters('functionRGName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.4.613.9944",
+              "templateHash": "7081553099238555194"
+            }
+          },
+          "parameters": {
+            "appNamePrefix": {
+              "type": "string",
+              "defaultValue": "[uniqueString(resourceGroup().id)]"
+            }
+          },
+          "functions": [],
+          "variables": {
+            "location": "[resourceGroup().location]",
+            "storageAccountName": "[format('{0}storage', replace(parameters('appNamePrefix'), '-', ''))]",
+            "storageQueueName": "events",
+            "appServiceName": "[format('{0}-appservice', parameters('appNamePrefix'))]",
+            "functionAppName": "[format('{0}-functionapp', parameters('appNamePrefix'))]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2019-06-01",
+              "name": "[variables('storageAccountName')]",
+              "location": "[variables('location')]",
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "kind": "StorageV2",
+              "properties": {
+                "supportsHttpsTrafficOnly": true,
+                "encryption": {
+                  "services": {
+                    "file": {
+                      "keyType": "Account",
+                      "enabled": true
+                    },
+                    "blob": {
+                      "keyType": "Account",
+                      "enabled": true
+                    }
+                  },
+                  "keySource": "Microsoft.Storage"
+                },
+                "accessTier": "Hot"
+              }
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices",
+              "apiVersion": "2021-04-01",
+              "name": "[format('{0}/{1}', variables('storageAccountName'), 'default')]",
+              "properties": {
+                "cors": {
+                  "corsRules": []
+                },
+                "deleteRetentionPolicy": {
+                  "enabled": true,
+                  "days": 7
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/queueServices",
+              "apiVersion": "2021-04-01",
+              "name": "[format('{0}/{1}', variables('storageAccountName'), 'default')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/queueServices/queues",
+              "apiVersion": "2021-04-01",
+              "name": "[format('{0}/{1}/{2}', variables('storageAccountName'), 'default', variables('storageQueueName'))]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/queueServices', variables('storageAccountName'), 'default')]",
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Web/serverfarms",
+              "apiVersion": "2021-01-15",
+              "name": "[variables('appServiceName')]",
+              "location": "[variables('location')]",
+              "kind": "functionapp",
+              "sku": {
+                "name": "Y1",
+                "tier": "Dynamic",
+                "size": "Y1",
+                "family": "Y",
+                "capacity": 0
+              },
+              "properties": {
+                "perSiteScaling": false,
+                "maximumElasticWorkerCount": 1,
+                "isSpot": false,
+                "reserved": false,
+                "isXenon": false,
+                "hyperV": false,
+                "targetWorkerCount": 0,
+                "targetWorkerSizeId": 0
+              }
+            },
+            {
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2021-01-15",
+              "name": "[variables('functionAppName')]",
+              "location": "[variables('location')]",
+              "kind": "functionapp",
+              "properties": {
+                "enabled": true,
+                "hostNameSslStates": [
+                  {
+                    "name": "[format('{0}.azurewebsites.net', variables('functionAppName'))]",
+                    "sslState": "Disabled",
+                    "hostType": "Standard"
+                  },
+                  {
+                    "name": "[format('{0}.scm.azurewebsites.net', variables('functionAppName'))]",
+                    "sslState": "Disabled",
+                    "hostType": "Standard"
+                  }
+                ],
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('appServiceName'))]",
+                "reserved": false,
+                "isXenon": false,
+                "hyperV": false,
+                "siteConfig": {
+                  "appSettings": [
+                    {
+                      "name": "AzureWebJobsStorage",
+                      "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};EndpointSuffix={1};AccountKey={2}', variables('storageAccountName'), environment().suffixes.storage, listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2019-06-01').keys[0].value)]"
+                    },
+                    {
+                      "name": "FUNCTIONS_WORKER_RUNTIME",
+                      "value": "custom"
+                    },
+                    {
+                      "name": "FUNCTIONS_EXTENSION_VERSION",
+                      "value": "~3"
+                    },
+                    {
+                      "name": "WEBSITE_MAX_DYNAMIC_APPLICATION_SCALE_OUT",
+                      "value": "1"
+                    }
+                  ]
+                },
+                "scmSiteAlsoStopped": false,
+                "clientAffinityEnabled": false,
+                "clientCertEnabled": false,
+                "hostNamesDisabled": false,
+                "dailyMemoryTimeQuota": 0,
+                "httpsOnly": true,
+                "redundancyMode": "None"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', variables('appServiceName'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Web/sites/config",
+              "apiVersion": "2021-01-15",
+              "name": "[format('{0}/{1}', variables('functionAppName'), 'web')]",
+              "properties": {
+                "numberOfWorkers": -1,
+                "defaultDocuments": [
+                  "Default.htm",
+                  "Default.html",
+                  "Default.asp",
+                  "index.htm",
+                  "index.html",
+                  "iisstart.htm",
+                  "default.aspx",
+                  "index.php",
+                  "hostingstart.html"
+                ],
+                "netFrameworkVersion": "v4.0",
+                "phpVersion": "5.6",
+                "requestTracingEnabled": false,
+                "remoteDebuggingEnabled": false,
+                "httpLoggingEnabled": false,
+                "logsDirectorySizeLimit": 35,
+                "detailedErrorLoggingEnabled": false,
+                "publishingUsername": "[format('${0}', variables('functionAppName'))]",
+                "scmType": "None",
+                "use32BitWorkerProcess": true,
+                "webSocketsEnabled": false,
+                "alwaysOn": false,
+                "managedPipelineMode": "Integrated",
+                "virtualApplications": [
+                  {
+                    "virtualPath": "/",
+                    "physicalPath": "site\\wwwroot",
+                    "preloadEnabled": true
+                  }
+                ],
+                "loadBalancing": "LeastRequests",
+                "experiments": {
+                  "rampUpRules": []
+                },
+                "autoHealEnabled": false,
+                "localMySqlEnabled": false,
+                "ipSecurityRestrictions": [
+                  {
+                    "ipAddress": "Any",
+                    "action": "Allow",
+                    "priority": 1,
+                    "name": "Allow all",
+                    "description": "Allow all access"
+                  }
+                ],
+                "scmIpSecurityRestrictions": [
+                  {
+                    "ipAddress": "Any",
+                    "action": "Allow",
+                    "priority": 1,
+                    "name": "Allow all",
+                    "description": "Allow all access"
+                  }
+                ],
+                "scmIpSecurityRestrictionsUseMain": false,
+                "http20Enabled": true,
+                "minTlsVersion": "1.2",
+                "ftpsState": "AllAllowed",
+                "preWarmedInstanceCount": 0
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', variables('functionAppName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Web/sites/hostNameBindings",
+              "apiVersion": "2021-01-15",
+              "name": "[format('{0}/{1}', variables('functionAppName'), format('{0}.azurewebsites.net', variables('functionAppName')))]",
+              "properties": {
+                "siteName": "[variables('functionAppName')]",
+                "hostNameType": "Verified"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', variables('functionAppName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "storageAccountId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+            },
+            "storageQueueName": {
+              "type": "string",
+              "value": "[variables('storageQueueName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('functionRGName'))]"
+      ]
+    }
+  ]
+}
