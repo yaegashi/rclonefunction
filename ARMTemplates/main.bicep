@@ -1,34 +1,47 @@
 targetScope = 'subscription'
 
-param storageRGName string
+param appRGName string
+param srcRGName string
 param storageAccountName string
 param storageContainerName string = 'artifacts'
-param functionRGName string
 
 var location = deployment().location
 
-resource storageRG 'Microsoft.Resources/resourceGroups@2021-04-01' = {
-  name: storageRGName
+resource srcRG 'Microsoft.Resources/resourceGroups@2021-04-01' = {
+  name: srcRGName
   location: location
 }
 
-module storageModule 'storage.bicep' = {
-  name: 'storageModule'
-  scope: storageRG
+module srcModule 'src.bicep' = {
+  name: 'srcModule'
+  scope: srcRG
   params: {
     storageAccountName: storageAccountName
     storageContainerName: storageContainerName
-    functionStorageAccountId: functionModule.outputs.storageAccountId
-    functionStorageQueueName: functionModule.outputs.storageQueueName
   }
 }
 
-resource functionRG 'Microsoft.Resources/resourceGroups@2021-04-01' = {
-  name: functionRGName
+module eventgridModule 'eventgrid.bicep' = {
+  name: 'eventgridModule'
+  scope: srcRG
+  params: {
+    srcStorageAccountName: srcModule.outputs.storageAccountName
+    srcStorageContainerName: srcModule.outputs.storageContainerName
+    appStorageAccountId: appModule.outputs.storageAccountId
+    appStorageQueueName: appModule.outputs.storageQueueName
+  }
+}
+
+resource appRG 'Microsoft.Resources/resourceGroups@2021-04-01' = {
+  name: appRGName
   location: location
 }
 
-module functionModule 'function.bicep' = {
-  name: 'functionModule'
-  scope: functionRG
+module appModule 'app.bicep' = {
+  name: 'appModule'
+  scope: appRG
+  params: {
+    srcRGName: srcRGName
+    srcStorageAccountName: srcModule.outputs.storageAccountName
+  }
 }

@@ -5,11 +5,14 @@
     "_generator": {
       "name": "bicep",
       "version": "0.4.613.9944",
-      "templateHash": "955950208328877484"
+      "templateHash": "6982805976826484473"
     }
   },
   "parameters": {
-    "storageRGName": {
+    "appRGName": {
+      "type": "string"
+    },
+    "srcRGName": {
       "type": "string"
     },
     "storageAccountName": {
@@ -18,9 +21,6 @@
     "storageContainerName": {
       "type": "string",
       "defaultValue": "artifacts"
-    },
-    "functionRGName": {
-      "type": "string"
     }
   },
   "functions": [],
@@ -31,20 +31,20 @@
     {
       "type": "Microsoft.Resources/resourceGroups",
       "apiVersion": "2021-04-01",
-      "name": "[parameters('storageRGName')]",
+      "name": "[parameters('srcRGName')]",
       "location": "[variables('location')]"
     },
     {
       "type": "Microsoft.Resources/resourceGroups",
       "apiVersion": "2021-04-01",
-      "name": "[parameters('functionRGName')]",
+      "name": "[parameters('appRGName')]",
       "location": "[variables('location')]"
     },
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2019-10-01",
-      "name": "storageModule",
-      "resourceGroup": "[parameters('storageRGName')]",
+      "name": "srcModule",
+      "resourceGroup": "[parameters('srcRGName')]",
       "properties": {
         "expressionEvaluationOptions": {
           "scope": "inner"
@@ -56,12 +56,6 @@
           },
           "storageContainerName": {
             "value": "[parameters('storageContainerName')]"
-          },
-          "functionStorageAccountId": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('functionRGName')), 'Microsoft.Resources/deployments', 'functionModule'), '2019-10-01').outputs.storageAccountId.value]"
-          },
-          "functionStorageQueueName": {
-            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('functionRGName')), 'Microsoft.Resources/deployments', 'functionModule'), '2019-10-01').outputs.storageQueueName.value]"
           }
         },
         "template": {
@@ -71,7 +65,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.4.613.9944",
-              "templateHash": "13752932892281504014"
+              "templateHash": "12490435605602111149"
             }
           },
           "parameters": {
@@ -80,19 +74,11 @@
             },
             "storageContainerName": {
               "type": "string"
-            },
-            "functionStorageAccountId": {
-              "type": "string"
-            },
-            "functionStorageQueueName": {
-              "type": "string",
-              "defaultValue": "events"
             }
           },
           "functions": [],
           "variables": {
-            "location": "[resourceGroup().location]",
-            "eventGridName": "[format('{0}-eventgrid', parameters('storageAccountName'))]"
+            "location": "[resourceGroup().location]"
           },
           "resources": [
             {
@@ -121,19 +107,88 @@
                 "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccountName'), 'default')]",
                 "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
               ]
+            }
+          ],
+          "outputs": {
+            "storageAccountName": {
+              "type": "string",
+              "value": "[parameters('storageAccountName')]"
             },
+            "storageContainerName": {
+              "type": "string",
+              "value": "[parameters('storageContainerName')]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('srcRGName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2019-10-01",
+      "name": "eventgridModule",
+      "resourceGroup": "[parameters('srcRGName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "srcStorageAccountName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('srcRGName')), 'Microsoft.Resources/deployments', 'srcModule'), '2019-10-01').outputs.storageAccountName.value]"
+          },
+          "srcStorageContainerName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('srcRGName')), 'Microsoft.Resources/deployments', 'srcModule'), '2019-10-01').outputs.storageContainerName.value]"
+          },
+          "appStorageAccountId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('appRGName')), 'Microsoft.Resources/deployments', 'appModule'), '2019-10-01').outputs.storageAccountId.value]"
+          },
+          "appStorageQueueName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('appRGName')), 'Microsoft.Resources/deployments', 'appModule'), '2019-10-01').outputs.storageQueueName.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.4.613.9944",
+              "templateHash": "16409755618893278075"
+            }
+          },
+          "parameters": {
+            "srcStorageAccountName": {
+              "type": "string"
+            },
+            "srcStorageContainerName": {
+              "type": "string"
+            },
+            "appStorageAccountId": {
+              "type": "string"
+            },
+            "appStorageQueueName": {
+              "type": "string",
+              "defaultValue": "events"
+            }
+          },
+          "functions": [],
+          "variables": {
+            "location": "[resourceGroup().location]",
+            "eventGridName": "[format('{0}-eventgrid', parameters('srcStorageAccountName'))]"
+          },
+          "resources": [
             {
               "type": "Microsoft.EventGrid/systemTopics",
               "apiVersion": "2021-06-01-preview",
               "name": "[variables('eventGridName')]",
               "location": "[variables('location')]",
               "properties": {
-                "source": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+                "source": "[resourceId('Microsoft.Storage/storageAccounts', parameters('srcStorageAccountName'))]",
                 "topicType": "Microsoft.Storage.StorageAccounts"
-              },
-              "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
-              ]
+              }
             },
             {
               "type": "Microsoft.EventGrid/systemTopics/eventSubscriptions",
@@ -142,14 +197,14 @@
               "properties": {
                 "destination": {
                   "properties": {
-                    "resourceId": "[parameters('functionStorageAccountId')]",
-                    "queueName": "[parameters('functionStorageQueueName')]",
+                    "resourceId": "[parameters('appStorageAccountId')]",
+                    "queueName": "[parameters('appStorageQueueName')]",
                     "queueMessageTimeToLiveInSeconds": 604800
                   },
                   "endpointType": "StorageQueue"
                 },
                 "filter": {
-                  "subjectBeginsWith": "[format('/blobServices/default/containers/{0}/blobs', parameters('storageContainerName'))]",
+                  "subjectBeginsWith": "[format('/blobServices/default/containers/{0}/blobs', parameters('srcStorageContainerName'))]",
                   "includedEventTypes": [
                     "Microsoft.Storage.BlobCreated",
                     "Microsoft.Storage.BlobDeleted",
@@ -167,7 +222,6 @@
                 }
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', parameters('storageAccountName'), 'default', parameters('storageContainerName'))]",
                 "[resourceId('Microsoft.EventGrid/systemTopics', variables('eventGridName'))]"
               ]
             }
@@ -175,20 +229,29 @@
         }
       },
       "dependsOn": [
-        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('functionRGName')), 'Microsoft.Resources/deployments', 'functionModule')]",
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('storageRGName'))]"
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('appRGName')), 'Microsoft.Resources/deployments', 'appModule')]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('srcRGName')), 'Microsoft.Resources/deployments', 'srcModule')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('srcRGName'))]"
       ]
     },
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2019-10-01",
-      "name": "functionModule",
-      "resourceGroup": "[parameters('functionRGName')]",
+      "name": "appModule",
+      "resourceGroup": "[parameters('appRGName')]",
       "properties": {
         "expressionEvaluationOptions": {
           "scope": "inner"
         },
         "mode": "Incremental",
+        "parameters": {
+          "srcRGName": {
+            "value": "[parameters('srcRGName')]"
+          },
+          "srcStorageAccountName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('srcRGName')), 'Microsoft.Resources/deployments', 'srcModule'), '2019-10-01').outputs.storageAccountName.value]"
+          }
+        },
         "template": {
           "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
           "contentVersion": "1.0.0.0",
@@ -196,10 +259,16 @@
             "_generator": {
               "name": "bicep",
               "version": "0.4.613.9944",
-              "templateHash": "179926134547530760"
+              "templateHash": "16628280583401101417"
             }
           },
           "parameters": {
+            "srcRGName": {
+              "type": "string"
+            },
+            "srcStorageAccountName": {
+              "type": "string"
+            },
             "appNamePrefix": {
               "type": "string",
               "defaultValue": "[uniqueString(resourceGroup().id)]"
@@ -208,17 +277,18 @@
           "functions": [],
           "variables": {
             "location": "[resourceGroup().location]",
-            "storageAccountName": "[format('{0}storage', replace(parameters('appNamePrefix'), '-', ''))]",
-            "storageQueueName": "events",
+            "appStorageAccountName": "[format('{0}storage', replace(parameters('appNamePrefix'), '-', ''))]",
+            "appStorageQueueName": "events",
             "appServiceName": "[format('{0}-appservice', parameters('appNamePrefix'))]",
             "functionAppName": "[format('{0}-functionapp', parameters('appNamePrefix'))]",
-            "rcloneScript": "chmod +x rclone && ./rclone copy rclone:config config && ./rclone --config config/rclone.conf -v copy src:artifacts dst: && ./rclone copy config rclone:config"
+            "appInsightsName": "[format('{0}-appinsights', parameters('appNamePrefix'))]",
+            "rcloneScript": "chmod +x rclone && ./rclone copy app:config config && ./rclone --config config/rclone.conf -v copy src:artifacts dst: && ./rclone copy config app:config"
           },
           "resources": [
             {
               "type": "Microsoft.Storage/storageAccounts",
               "apiVersion": "2019-06-01",
-              "name": "[variables('storageAccountName')]",
+              "name": "[variables('appStorageAccountName')]",
               "location": "[variables('location')]",
               "sku": {
                 "name": "Standard_LRS"
@@ -245,7 +315,7 @@
             {
               "type": "Microsoft.Storage/storageAccounts/blobServices",
               "apiVersion": "2021-04-01",
-              "name": "[format('{0}/{1}', variables('storageAccountName'), 'default')]",
+              "name": "[format('{0}/{1}', variables('appStorageAccountName'), 'default')]",
               "properties": {
                 "cors": {
                   "corsRules": []
@@ -256,34 +326,46 @@
                 }
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('appStorageAccountName'))]"
               ]
             },
             {
               "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
               "apiVersion": "2021-04-01",
-              "name": "[format('{0}/{1}/{2}', variables('storageAccountName'), 'default', 'config')]",
+              "name": "[format('{0}/{1}/{2}', variables('appStorageAccountName'), 'default', 'config')]",
               "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', variables('storageAccountName'), 'default')]",
-                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('appStorageAccountName'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', variables('appStorageAccountName'), 'default')]"
               ]
             },
             {
               "type": "Microsoft.Storage/storageAccounts/queueServices",
               "apiVersion": "2021-04-01",
-              "name": "[format('{0}/{1}', variables('storageAccountName'), 'default')]",
+              "name": "[format('{0}/{1}', variables('appStorageAccountName'), 'default')]",
               "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('appStorageAccountName'))]"
               ]
             },
             {
               "type": "Microsoft.Storage/storageAccounts/queueServices/queues",
               "apiVersion": "2021-04-01",
-              "name": "[format('{0}/{1}/{2}', variables('storageAccountName'), 'default', variables('storageQueueName'))]",
+              "name": "[format('{0}/{1}/{2}', variables('appStorageAccountName'), 'default', variables('appStorageQueueName'))]",
               "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts/queueServices', variables('storageAccountName'), 'default')]",
-                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('appStorageAccountName'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts/queueServices', variables('appStorageAccountName'), 'default')]"
               ]
+            },
+            {
+              "type": "Microsoft.Insights/components",
+              "apiVersion": "2020-02-02",
+              "name": "[variables('appInsightsName')]",
+              "location": "[variables('location')]",
+              "kind": "web",
+              "properties": {
+                "Application_Type": "web",
+                "publicNetworkAccessForIngestion": "Enabled",
+                "publicNetworkAccessForQuery": "Enabled"
+              }
             },
             {
               "type": "Microsoft.Web/serverfarms",
@@ -337,7 +419,15 @@
                   "appSettings": [
                     {
                       "name": "AzureWebJobsStorage",
-                      "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};EndpointSuffix={1};AccountKey={2}', variables('storageAccountName'), environment().suffixes.storage, listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2019-06-01').keys[0].value)]"
+                      "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};EndpointSuffix={1};AccountKey={2}', variables('appStorageAccountName'), environment().suffixes.storage, listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('appStorageAccountName')), '2019-06-01').keys[0].value)]"
+                    },
+                    {
+                      "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                      "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName'))).ConnectionString]"
+                    },
+                    {
+                      "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
+                      "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName'))).InstrumentationKey]"
                     },
                     {
                       "name": "FUNCTIONS_WORKER_RUNTIME",
@@ -356,16 +446,28 @@
                       "value": "https://github.com/yaegashi/rclonefunction/releases/latest/download/rclonefunction.zip"
                     },
                     {
-                      "name": "RCLONE_CONFIG_RCLONE_TYPE",
+                      "name": "RCLONE_CONFIG_SRC_TYPE",
                       "value": "azureblob"
                     },
                     {
-                      "name": "RCLONE_CONFIG_RCLONE_ACCOUNT",
-                      "value": "[variables('storageAccountName')]"
+                      "name": "RCLONE_CONFIG_SRC_ACCOUNT",
+                      "value": "[parameters('srcStorageAccountName')]"
                     },
                     {
-                      "name": "RCLONE_CONFIG_RCLONE_KEY",
-                      "value": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2019-06-01').keys[0].value]"
+                      "name": "RCLONE_CONFIG_SRC_KEY",
+                      "value": "[listKeys(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('srcRGName')), 'Microsoft.Storage/storageAccounts', parameters('srcStorageAccountName')), '2019-06-01').keys[0].value]"
+                    },
+                    {
+                      "name": "RCLONE_CONFIG_APP_TYPE",
+                      "value": "azureblob"
+                    },
+                    {
+                      "name": "RCLONE_CONFIG_APP_ACCOUNT",
+                      "value": "[variables('appStorageAccountName')]"
+                    },
+                    {
+                      "name": "RCLONE_CONFIG_APP_KEY",
+                      "value": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('appStorageAccountName')), '2019-06-01').keys[0].value]"
                     },
                     {
                       "name": "RCLONE_SCRIPT",
@@ -382,8 +484,9 @@
                 "redundancyMode": "None"
               },
               "dependsOn": [
+                "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]",
                 "[resourceId('Microsoft.Web/serverfarms', variables('appServiceName'))]",
-                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('appStorageAccountName'))]"
               ]
             },
             {
@@ -473,17 +576,18 @@
           "outputs": {
             "storageAccountId": {
               "type": "string",
-              "value": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+              "value": "[resourceId('Microsoft.Storage/storageAccounts', variables('appStorageAccountName'))]"
             },
             "storageQueueName": {
               "type": "string",
-              "value": "[variables('storageQueueName')]"
+              "value": "[variables('appStorageQueueName')]"
             }
           }
         }
       },
       "dependsOn": [
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('functionRGName'))]"
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('appRGName'))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('srcRGName')), 'Microsoft.Resources/deployments', 'srcModule')]"
       ]
     }
   ]

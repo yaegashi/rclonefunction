@@ -1,14 +1,22 @@
+param srcRGName string
+param srcStorageAccountName string
 param appNamePrefix string = uniqueString(resourceGroup().id)
 
 var location = resourceGroup().location
-var storageAccountName = format('{0}storage', replace(appNamePrefix, '-', ''))
-var storageQueueName = 'events'
+var appStorageAccountName = format('{0}storage', replace(appNamePrefix, '-', ''))
+var appStorageQueueName = 'events'
 var appServiceName = '${appNamePrefix}-appservice'
 var functionAppName = '${appNamePrefix}-functionapp'
-var rcloneScript = 'chmod +x rclone && ./rclone copy rclone:config config && ./rclone --config config/rclone.conf -v copy src:artifacts dst: && ./rclone copy config rclone:config'
+var appInsightsName = '${appNamePrefix}-appinsights'
+var rcloneScript = 'chmod +x rclone && ./rclone copy app:config config && ./rclone --config config/rclone.conf -v copy src:artifacts dst: && ./rclone copy config app:config'
 
-resource storageAccount 'Microsoft.Storage/storageAccounts@2019-06-01' = {
-  name: storageAccountName
+resource srcStorageAccount 'Microsoft.Storage/storageAccounts@2019-06-01' existing = {
+  name: srcStorageAccountName
+  scope: resourceGroup(srcRGName)
+}
+
+resource appStorageAccount 'Microsoft.Storage/storageAccounts@2019-06-01' = {
+  name: appStorageAccountName
   location: location
   sku: {
     name: 'Standard_LRS'
@@ -34,7 +42,7 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2019-06-01' = {
 }
 
 resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2021-04-01' = {
-  parent: storageAccount
+  parent: appStorageAccount
   name: 'default'
   properties: {
     cors: {
@@ -53,16 +61,26 @@ resource container 'Microsoft.Storage/storageAccounts/blobServices/containers@20
 }
 
 resource queueService 'Microsoft.Storage/storageAccounts/queueServices@2021-04-01' = {
-  parent: storageAccount
+  parent: appStorageAccount
   name: 'default'
 }
 
 resource queue 'Microsoft.Storage/storageAccounts/queueServices/queues@2021-04-01' = {
   parent: queueService
-  name: storageQueueName
+  name: appStorageQueueName
 }
 
-// App Service
+resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
+  name: appInsightsName
+  location: location
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    publicNetworkAccessForIngestion: 'Enabled'
+    publicNetworkAccessForQuery: 'Enabled'
+  }
+}
+
 resource appService 'Microsoft.Web/serverfarms@2021-01-15' = {
   name: appServiceName
   location: location
@@ -86,7 +104,6 @@ resource appService 'Microsoft.Web/serverfarms@2021-01-15' = {
   }
 }
 
-// Function App
 resource functionApp 'Microsoft.Web/sites@2021-01-15' = {
   name: functionAppName
   location: location
@@ -113,7 +130,15 @@ resource functionApp 'Microsoft.Web/sites@2021-01-15' = {
       appSettings: [
         {
           name: 'AzureWebJobsStorage'
-          value: 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${storageAccount.listKeys().keys[0].value}'
+          value: 'DefaultEndpointsProtocol=https;AccountName=${appStorageAccount.name};EndpointSuffix=${environment().suffixes.storage};AccountKey=${appStorageAccount.listKeys().keys[0].value}'
+        }
+        {
+          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+          value: appInsights.properties.ConnectionString
+        }
+        {
+          name: 'APPINSIGHTS_INSTRUMENTATIONKEY'
+          value: appInsights.properties.InstrumentationKey
         }
         {
           name: 'FUNCTIONS_WORKER_RUNTIME'
@@ -132,16 +157,28 @@ resource functionApp 'Microsoft.Web/sites@2021-01-15' = {
           value: 'https://github.com/yaegashi/rclonefunction/releases/latest/download/rclonefunction.zip'
         }
         {
-          name: 'RCLONE_CONFIG_RCLONE_TYPE'
+          name: 'RCLONE_CONFIG_SRC_TYPE'
           value: 'azureblob'
         }
         {
-          name: 'RCLONE_CONFIG_RCLONE_ACCOUNT'
-          value: storageAccount.name
+          name: 'RCLONE_CONFIG_SRC_ACCOUNT'
+          value: srcStorageAccount.name
         }
         {
-          name: 'RCLONE_CONFIG_RCLONE_KEY'
-          value: storageAccount.listKeys().keys[0].value
+          name: 'RCLONE_CONFIG_SRC_KEY'
+          value: srcStorageAccount.listKeys().keys[0].value
+        }
+        {
+          name: 'RCLONE_CONFIG_APP_TYPE'
+          value: 'azureblob'
+        }
+        {
+          name: 'RCLONE_CONFIG_APP_ACCOUNT'
+          value: appStorageAccount.name
+        }
+        {
+          name: 'RCLONE_CONFIG_APP_KEY'
+          value: appStorageAccount.listKeys().keys[0].value
         }
         {
           name: 'RCLONE_SCRIPT'
@@ -159,7 +196,6 @@ resource functionApp 'Microsoft.Web/sites@2021-01-15' = {
   }
 }
 
-// Function App Config
 resource functionAppConfig 'Microsoft.Web/sites/config@2021-01-15' = {
   parent: functionApp
   name: 'web'
@@ -228,7 +264,6 @@ resource functionAppConfig 'Microsoft.Web/sites/config@2021-01-15' = {
   }
 }
 
-// Function App Binding
 resource functionAppBinding 'Microsoft.Web/sites/hostNameBindings@2021-01-15' = {
   parent: functionApp
   name: '${functionApp.name}.azurewebsites.net'
@@ -238,5 +273,5 @@ resource functionAppBinding 'Microsoft.Web/sites/hostNameBindings@2021-01-15' = 
   }
 }
 
-output storageAccountId string = storageAccount.id
+output storageAccountId string = appStorageAccount.id
 output storageQueueName string = queue.name
