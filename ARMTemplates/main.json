@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.4.613.9944",
-      "templateHash": "7536392987982007453"
+      "templateHash": "3214074120539962582"
     }
   },
   "parameters": {
@@ -196,7 +196,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.4.613.9944",
-              "templateHash": "7081553099238555194"
+              "templateHash": "17219219852265929220"
             }
           },
           "parameters": {
@@ -292,7 +292,7 @@
                 "perSiteScaling": false,
                 "maximumElasticWorkerCount": 1,
                 "isSpot": false,
-                "reserved": false,
+                "reserved": true,
                 "isXenon": false,
                 "hyperV": false,
                 "targetWorkerCount": 0,
@@ -304,7 +304,7 @@
               "apiVersion": "2021-01-15",
               "name": "[variables('functionAppName')]",
               "location": "[variables('location')]",
-              "kind": "functionapp",
+              "kind": "functionapp,linux",
               "properties": {
                 "enabled": true,
                 "hostNameSslStates": [
@@ -340,6 +340,10 @@
                     {
                       "name": "WEBSITE_MAX_DYNAMIC_APPLICATION_SCALE_OUT",
                       "value": "1"
+                    },
+                    {
+                      "name": "WEBSITE_RUN_FROM_PACKAGE",
+                      "value": "https://github.com/yaegashi/rclonefunction/releases/latest/download/rclonefunction.zip"
                     }
                   ]
                 },

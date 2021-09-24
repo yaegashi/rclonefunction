@@ -72,7 +72,7 @@ resource appService 'Microsoft.Web/serverfarms@2021-01-15' = {
     perSiteScaling: false
     maximumElasticWorkerCount: 1
     isSpot: false
-    reserved: false
+    reserved: true
     isXenon: false
     hyperV: false
     targetWorkerCount: 0
@@ -84,7 +84,7 @@ resource appService 'Microsoft.Web/serverfarms@2021-01-15' = {
 resource functionApp 'Microsoft.Web/sites@2021-01-15' = {
   name: functionAppName
   location: location
-  kind: 'functionapp'
+  kind: 'functionapp,linux'
   properties: {
     enabled: true
     hostNameSslStates: [
@@ -120,6 +120,10 @@ resource functionApp 'Microsoft.Web/sites@2021-01-15' = {
         {
           name: 'WEBSITE_MAX_DYNAMIC_APPLICATION_SCALE_OUT'
           value: '1'
+        }
+        {
+          name: 'WEBSITE_RUN_FROM_PACKAGE'
+          value: 'https://github.com/yaegashi/rclonefunction/releases/latest/download/rclonefunction.zip'
         }
       ]
     }
