@@ -1,8 +1,14 @@
 # rclonefunction
 
+## Introduction
+
 rclonefunction is an experimental Azure function with a custom handler written in Go.
 
-It tries to watch and sync the changes in the content in the Azure storage blob container to another storage by launching [RClone].  You can suuply rclone.conf to specify the destination.  It can be any place as long as RClone can support.
+It tries to watch and sync the changes in the content in the Azure storage blob container to another storage by launching [rclone].  You can suuply rclone.conf to specify the destination.  It can be any place as long as rclone can support.
+
+![](images/diag-architecture.png)
+
+## Deploy to Azure
 
 You can try it out with the following Deploy to Azure button.
 
@@ -25,4 +31,8 @@ drive_id = b!IcOpYe_........................
 drive_type = documentLibrary
 ```
 
-[RClone]: https://rclone.org
+## References
+
+- [rclonefunction](https://speakerdeck.com/yaegashi/rclonefunction) (Presentation in Japanese)
+
+[rclone]: https://rclone.org
